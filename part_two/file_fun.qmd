@@ -1,0 +1,51 @@
+---
+title: "file_fun"
+author: "Madison Beebe"
+format: pdf
+editor: visual
+---
+
+### Part 2
+
+```{r, libraries needed, reading in the file}
+library(tidyverse)
+codes <- readLines("/Users/Madison/Documents/UCONN/DSMS/GRAD5100/codes.txt")
+```
+
+#### 1.
+
+Write a function that takes a string of this form, extracts the alphabetic code nnnnn and the extension and returns a string of the form nnnnn.extension. So, for example, given '35538_YLTRR_csv' it returns 'YLTRR.csv'.
+
+```{r}
+extension_convertor <- function(n) {
+  
+  str_1 <- str_extract(n, "[a-zA-Z]{5}") #extract anything with 5 consequtive letters
+  
+  str_2 <- str_extract(n, "[a-zA-Z]+\\b") #extract anything that is one or more letters 
+  #but ends with a word boundry
+  
+  return(paste(str_1, ".", str_2, sep = "")) #stich the strings together, 
+  #adding the "." but no spaces
+}
+```
+
+#### 2.
+
+Using your function, write code that reads in the entries from codes.txt and for each code writes the 5 digit number xxxxx into a file named nnnnn.extension constructed by your function in part 1. All of these files should be contained in a subdirectory of your main project directory called 'expanded'. So for example, you would create a file called expanded/YLTRR.csv containing(just) 35538.
+
+```{r, extracting the 5 digit numbers & then the file names}
+file_contents <- as.numeric(str_extract(codes, "[0-9]{5}"))
+file_names <- extension_convertor(codes)
+#dir.create("/Users/Madison/Documents/UCONN/DSMS/GRAD5100/Final/expanded")
+```
+
+```{r, generating the files}
+for (i in 1:length(codes)) {
+  file_name <- paste("expanded", file_names[i], sep = "/") #create a string
+  #for the file name for i in codes
+  file.create(file = file_name)
+  write(file_contents[i], file = file_name, append = TRUE)
+}
+```
+
+Note, I had to generate the files as empty first and then append to the files. Unfortunately with R if I tried to add the number sequence at initial file creation, it includes artifacts like a column of x and \[1\]. Using cat() also did not work as there is an invisible null added to each used of cat(), that got passed onto the file.

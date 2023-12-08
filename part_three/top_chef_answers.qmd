@@ -1,0 +1,194 @@
+---
+title: "topChef"
+author: "Madison Beebe"
+format: pdf
+editor: visual
+---
+
+### Top Chef problems
+
+The topchef package and datasets are from: https://github.com/celevitz/topChef
+
+```{r, package load in}
+library(topChef)
+library(dplyr)
+library(tidyverse) #includes the stringr package
+library(tidyr)
+```
+
+```{r, loads the datasets into tibbles from being promise objects}
+data(chefdetails)
+data(judges)
+
+head(chefdetails)
+head(judges)
+```
+
+#### 1.
+
+Create versions of the chef details and judges tables that exclude any records coming from seasons that include the word Masters or Canada.
+
+```{r}
+chefdetails_filtered <- chefdetails %>% 
+  filter(!str_detect(season, "Masters|Canada"))
+#table(chefdetails_filtered$season) #double checking
+
+judges_filtered <- judges %>% 
+  filter(!str_detect(season, "Masters|Canada"))
+#table(judges_filtered$season) #double checking
+```
+
+#### 2.
+
+Further trim your chef details and judges tables by including only the columns of interest from the directions.
+
+```{r}
+chef_df <- chefdetails_filtered %>%
+  select(season, seasonNumber, name, placement, gender)
+
+judges_df <- judges_filtered %>%
+  select(season, seasonNumber, episode, challengeType, guestJudge, competedOnTC)
+
+head(chef_df)
+head(judges_df)
+```
+
+#### 3.
+
+Make a table that has two columns, one called season and one called seasonNumber showing the number associated with each season.
+
+```{r}
+chef_table <- chef_df %>%
+  select(season, seasonNumber) %>%
+  group_by(season) %>% 
+  summarise(median(seasonNumber)) %>%
+  rename(seasonNumber = "median(seasonNumber)")
+
+chef_table
+```
+
+#### 4.
+
+Answer the following questions using your tables so far.
+
+##### a.
+
+Among all chef contestants, how many are male and how many are female?
+
+```{r}
+table(chef_df$gender)
+```
+
+152 are female, and 170 are male.
+
+##### b.
+
+Among all winners(placement==1) how many are male and how many are female?
+
+```{r}
+table(
+  (chef_df %>%
+     filter(placement==1))$gender)
+```
+
+6 are female, 14 are male.
+
+##### c.
+
+Among all sets of top 3 finalists(placement=1,2,3) how many are male and how many are female?
+
+```{r}
+table(
+  (chef_df %>%
+     filter(placement < 4))$gender)
+```
+
+25 are female, 36 are male.
+
+##### d.
+
+Compare the number of times a female was placed in the top 3 with the number of times a female won. Does this number seem unusual? That is, are women who place in the top 3 less likely than expected to ultimately win the competition? Why or why not?
+
+If we compare the ratio of men who won vs. men who placed within the top three(which includes men who won), to the same ratio but with women we see:
+
+```{r}
+14 / 36 #males who won vs. males placed within the top 3
+6 / 25 #females who won vs. females placed within the top 3
+```
+
+From this, you could state that if a man placed within the top 3 for the season, there is a 39%(rounded) chance that he also won the same season. However for women, this chance is 24%. The chance a woman who places within the top 3 for the season also wins the same season is 15% less likely than for a man, going based off gender alone. From this we could agree that women who place in the top three are less likely to also have won the season, when comparing their chance to the same chance but with men.
+
+#### 5.
+
+Make a table with one row for each first place winner containing the winner's name, the season they won, and a column containing 'Yes' or 'No' depending on whether they served as a guest judge or not.
+
+```{r}
+chef_df_winners <- 
+  chef_df %>%
+  filter(placement == 1) %>%
+  select(name, season)
+```
+
+I am going to merge the `chef_df_winners` with column $guestJudge$ from `judges_df`. However, before I do so, I am going to add an additional new column to `judges_df` that is duplicated of the $guestJudge$ .
+
+```{r}
+guest_judges_df <- judges_df %>%
+  select(guestJudge) %>%
+  distinct(guestJudge)
+
+guest_judges_df$Guest_Judge <- guest_judges_df$guestJudge
+guest_judges_df <- guest_judges_df %>% 
+  rename(name = guestJudge)
+```
+
+The reason for this is I need to join the two dataframes based on the $name$ column from `chef_df_winners` with the original $guestJudge$ column from `judges_df`. I still need a way of preserving who the name of the guest judge for each episode, hence the duplication of the column. I renamed the original $guestJudge$ column to $name$ for easier merging of the datasets. I also filtered the `guest_judges_df` to only contain each guest judge name once- since the question is concerned with whether or not the winners guested at all, not also the number of times they guested as a judge.
+
+To continue in preserving the information about the guest judge, I need to specify my type of join: a left join. The left join will preserve all records in the first data frame(`chef_df_winners`), even if there is no corresponding 'match' to merge based on with in the second data frame(`guest_judges`). This means if there was a winner for one season that never ended up as a guest judge on a future season, their 'record' in the merged data frame will not be dropped. However, if there are any guest judges that do not have a corresponding 'match' in the `chef_df_winners`, or in other words they were not a winner on a previous season, they will be excluded from the merged data frame.
+
+```{r}
+winners_and_judges <- left_join(chef_df_winners, guest_judges_df, by = join_by(name))
+winners_and_judges
+```
+
+As can be seen, all the winners, or entries from `chef_df_winners` (20 total) have been preserved, whereas information on if they appeared as a guest judge in the column $Guest\_Judge$ only has their name repeated if they did appear as a guest judge from the `guest_judges_df`. For winners where they did not appear as a guest judge, they have NA instead.
+
+Replacing any NAs with 'No', and any none NAs with 'Yes' will give us the indicator of whether or not they appeared as a guest judge or not.
+
+```{r}
+winners_and_judges$Guest_Judge <- ifelse(is.na(winners_and_judges$Guest_Judge), "No", "Yes")
+winners_and_judges
+```
+
+Here, name is the name of the winner, season is the season title that they won, and $Guest\_Judge$ is a indicator for if they were a guest judge on a different season, 'Yes' indicating they were, and 'No' indicating they were not.
+
+#### 6.
+
+Find all contestants who were not first place winners but did serve as a guest judge at some point. Make sure to only list each name once.
+
+```{r}
+chef_df_non_winners <- 
+  chef_df %>%
+  filter(placement != 1) %>%
+  select(name, season)
+```
+
+The dataframe `guest_judges_df` here can be re-used without alterations. We have already filtered this dataframe to not repeat guest judge names if they appeared on more than one episode. The `guest_judges_df` has the extra column $Guest\_Judge$, which I will drop.
+
+```{r}
+contestants_and_judges <- inner_join(chef_df_non_winners, guest_judges_df, 
+                                     by = join_by(name))
+
+contestants_and_judges <- contestants_and_judges %>% select(name, season)
+
+contestants_and_judges
+```
+
+Instead of doing a left_join as with question 5, I did an inner join. Here we are not concerned about preserving the rows of contestants never served as a guest judge, and we are also not concerned about preserving the rows of guest judges who were never a contestant previously. Inner joins will drop any rows where there is not a match, leaving only rows with matches between both data frames.
+
+```{r}
+table(contestants_and_judges$name < 1)
+```
+
+And here is the double check that there are no repeated names within the `contestants_and_judges` data frame.
+
+Of the total 322 total contestants, 46 of them who were not winners of their season appeared at some point as a guest judge.

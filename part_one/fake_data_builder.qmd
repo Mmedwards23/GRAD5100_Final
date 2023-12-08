@@ -1,0 +1,178 @@
+---
+title: "fake_data_builder"
+author: "Madison Beebe"
+format: pdf
+editor: visual
+---
+
+## Part 1 - Fake Data Generation
+
+### Generation of the Fake data: requirements are as follows
+
+-   800 samples
+
+-   5 columns(features): ID, Group, Feature_1, Feature_2 and Feature_3
+
+    -   ID: A unique identifier for each sample with the form "IDxxx" where xxx is a three digit number
+
+    -   Group: A, B, C ; about a third of the samples in each group
+
+    -   Feature 1: Normally distributed with a mean of 2500; and 66%(1 SD) of the data must fall within 2200 - 2800
+
+    -   Feature 2: Normally distributed with a mean of 400 & SD of 15
+
+    -   Feature 3: Depends on the Group feature
+
+        -   if A: 3 \* (Feature_1) - 5 \* (Feature_2) + $\epsilon$
+
+        -   if B: 2 \* (Feature_1) + $\epsilon$
+
+        -   if -1 \* (Feature_1) + (Feature_2)+ $\epsilon$
+
+    -   For Feature 3, "In each of cases A, B, and C the difference between Feature_3 and the value given by the formula is a normally distributed random variable with mean 0 and standard deviation 12"
+
+        -   This means I will be adding the term + $\epsilon$ which is sampled from a normal distribution with mean 0 and standard deviation 12.
+
+```{r, setting seed & other library load ins}
+
+set.seed(873674823)
+library(dplyr)
+library(ggplot2)
+library(tibble)
+```
+
+#### Group Creation
+
+```{r, group creation}
+fake_data_group <- sample(x = c("A", "B", "C"), #the 3 options for group
+                          prob = c(0.33, 0.34, 0.33), #roughly a third to each group
+                          size = 800, #800 samples
+                          replace = TRUE) #sampling with replacement)]
+```
+
+#### Feature 1
+
+```{r}
+fake_data_F1 <- rnorm(800, mean = 2500, sd = 300)
+#ggplot() + geom_histogram(aes(x = fake_data_F1))
+```
+
+The SD here is set to 300 as the directions state 66% of the data must be within 2200 - 2800 with a mean of 2500, which means 66% of the data must be within 1 standard deviation of 2500, making the standard deviation 300.
+
+#### Feature 2
+
+```{r}
+fake_data_F2 <- rnorm(800, mean = 400, sd = 15)
+#ggplot() + geom_histogram(aes(x = fake_data_F2))
+```
+
+I decided the features for unique ID and Feature 3 would be best coded for once there is already a tibble assembled.
+
+#### Dataframe construction
+
+```{r}
+fake_data_3cols= tibble(Group = fake_data_group, 
+                        Feature_1 = fake_data_F1, 
+                        Feature_2 = fake_data_F2)
+head(fake_data_3cols)
+```
+
+#### Adding blank columns for ID and Feature_3 columns
+
+```{r}
+fake_data_pre <- fake_data_3cols %>%
+  add_column("ID" = NA, .before = "Group") %>%
+  add_column("Feature_3" = NA, .after = "Feature_2")
+head(fake_data_pre)
+```
+
+Adding the columns as empty is not necessary, just a preference.
+
+#### Assigning unique IDs to the ID column
+
+```{r, random number generated for the ID column}
+random_num_for_ID <- sample(x = 100:999,
+                          size = 800, #800 samples
+                          replace = FALSE)
+```
+
+```{r, attaching the string "ID" to the random 3 digit number}
+random_string_for_ID <- gsub(" ", "", paste("ID", as.character(random_num_for_ID)))
+```
+
+```{r}
+fake_data_pre <- fake_data_pre %>% mutate(ID = random_string_for_ID)
+#table(fake_data_pre$ID < 1.01) #returns false 800, no duplicates
+```
+
+#### Generating Feature_3
+
+```{r, generating epsilon for Feature_3}
+epsilon <- rnorm(800, mean = 0, sd = 12)
+#ggplot() + geom_histogram(aes(x = epsilon))
+```
+
+```{r, calculation of Feature_3}
+fake_data_pre <- fake_data_pre %>% 
+  mutate(Feature_3 = case_when(
+    Group == "A" ~ 3 * (Feature_1) - 5 * (Feature_2) + epsilon,
+    Group == "B" ~ 2 * (Feature_1) + epsilon,
+    Group == "C" ~ -1 * (Feature_1) + (Feature_2) + epsilon))
+
+head(fake_data_pre)
+```
+
+### Questions about the generated data
+
+#### a.
+
+Based on the theoretical distribution of Feature_1, how many samples do you expect to find where the value of the feature is greater than 3000?
+
+Feature_1 was constructed with a mean of 2500, and a SD of 300.
+
+```{r}
+F1_samples_hypo_greater_than_3k <- (1 - pnorm(3000, mean = 2500, sd = 300)) * 800
+F1_samples_hypo_greater_than_3k
+```
+
+Depending on how you want to round, I would expect either 38 or 39 samples of the 800 to have values greater than 3000.
+
+#### b.
+
+How many samples did you actually find where Feature_1 is greater than 3000?
+
+```{r}
+F1_samples_greater_than_3k <- table(fake_data_pre$Feature_1 > 3000)
+F1_samples_greater_than_3k
+```
+
+There are 34 samples that for Feature_1 they have a value greater than 3000(this technically could change each time the code chunk to generate the random sample is run, but the first time should be the same since the seed is set).
+
+#### c.
+
+Group the dataset by the Group field and compute the mean and standard deviation of Feature_3 within each group.
+
+```{r}
+grouped_data <- fake_data_pre %>%
+  group_by(Group) %>%
+  summarise(count = n(), mean_Feature_3 = mean(Feature_3), SD_Featutre_3 = sd(Feature_3))
+
+grouped_data
+```
+
+#### d.
+
+Make a scatterplot of Feature_3 vs. Feature_1.
+
+```{r}
+plot(fake_data_pre$Feature_1, fake_data_pre$Feature_3)
+```
+
+#### e.
+
+Write your constructed tibble to a csv file called fake_data.csv
+
+```{r}
+write.csv(fake_data_pre, file = "fake_data.csv")
+#by default it wrote it to the same place this file is stored.
+```
